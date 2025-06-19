@@ -3,15 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 
 	grype_types "github.com/anchore/grype/grype/presenter/models"
 	trivy_types "github.com/aquasecurity/trivy/pkg/types"
 	grype_helper "github.com/flavio/sbom-merger/internal/grype"
-	openclarity_merger "github.com/flavio/sbom-merger/internal/openclarity"
-	sbombasm_merger "github.com/flavio/sbom-merger/internal/sbomasm"
 	trivy_helper "github.com/flavio/sbom-merger/internal/trivy"
 	"github.com/flavio/sbom-merger/internal/types"
 )
@@ -62,37 +59,6 @@ func main() {
 	}
 
 	fmt.Printf("Syft SBOM generated for image %s with %d vulnerabilities\n", image, len(document.Matches))
-
-	// openclarityMerge(trivySBOM, syftSBOM)
-	// sbomasmMerge(trivySBOM, syftSBOM)
-}
-
-func openclarityMerge(trivySBOM, syftSBOM []byte) {
-	sbomBytes, err := openclarity_merger.Merge(trivySBOM, syftSBOM)
-	if err != nil {
-		log.Printf("failed to generate openclarity merged bom: %v", err)
-	}
-
-	mergedSBOMFilename := "merged.sbom.openclarity.cyclonedx.json"
-	if err := os.WriteFile(mergedSBOMFilename, sbomBytes, 0o644); err != nil {
-		log.Printf("failed to write merged sbom: %v", err)
-	} else {
-		fmt.Printf("Merged SBOM written to %s\n", mergedSBOMFilename)
-	}
-}
-
-func sbomasmMerge(trivySBOM, syftSBOM []byte) {
-	sbomBytes, err := sbombasm_merger.Merge(trivySBOM, syftSBOM)
-	if err != nil {
-		log.Printf("failed to generate sbomasm merged bom: %v", err)
-	}
-
-	mergedSBOMFilename := "merged.sbom.sbomasm.cyclonedx.json"
-	if err := os.WriteFile(mergedSBOMFilename, sbomBytes, 0o644); err != nil {
-		log.Printf("failed to write merged sbom: %v", err)
-	} else {
-		fmt.Printf("Merged SBOM written to %s\n", mergedSBOMFilename)
-	}
 }
 
 func generateSBOM(scanner types.ScannerType, image string) ([]byte, error) {
