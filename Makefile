@@ -1,0 +1,81 @@
+IMAGE=registry.k8s.io/ingress-nginx/controller:v1.12.0
+
+#########
+# trivy #
+#########
+
+trivy.sbom.spdx.json:
+	@echo "Generating SPDX SBOM"
+	trivy image --format spdx-json $(IMAGE) --output trivy.sbom.spdx.json
+	@echo "SBOM generated at trivy.sbom.spdx.json"
+
+trivy.sbom.cyclonedx.json:
+	@echo "Generating cyclonedx-json SBOM"
+	trivy image --format cyclonedx $(IMAGE) --output trivy.sbom.cyclonedx.json
+	@echo "SBOM generated at trivy.sbom.cyclonedx.json"
+
+trivy.report.sarif.json: trivy.sbom.cyclonedx.json
+	@echo "Generating trivy report using sarif format"
+	trivy sbom --format sarif --output trivy.report.sarif.json trivy.sbom.cyclonedx.json
+	@echo "Report generated at trivy.report.sarif.json"
+
+trivy.report.json: trivy.sbom.cyclonedx.json
+	@echo "Generating trivy report using json format"
+	trivy sbom --format json --output trivy.report.json trivy.sbom.cyclonedx.json
+	@echo "Report generated at trivy.report.json"
+
+#################
+# syft && grype #
+#################
+
+syft.sbom.spdx.json:
+	@echo "Generating syft SBOM using SPDX format"
+	syft scan $(IMAGE) --output spdx-json@2.2 | jq > syft.sbom.spdx.json
+	@echo "SBOM generated at syft.sbom.spdx.json"
+
+syft.sbom.cyclonedx.json:
+	@echo "Generating syft SBOM using cyclonedx-json format"
+	syft scan $(IMAGE) --output cyclonedx-json | jq > syft.sbom.cyclonedx.json
+	@echo "SBOM generated at syft.sbom.cyclonedx.json"
+
+grype.report.sarif.json: syft.sbom.cyclonedx.json
+	@echo "Generating grype report using sarif format"
+	grype sbom:syft.sbom.cyclonedx.json --output sarif | jq > grype.report.sarif.json
+	@echo "Report generated at grype.report.sarif.json"
+
+grype.report.json: syft.sbom.cyclonedx.json
+	@echo "Generating grype report using json format"
+	grype sbom:syft.sbom.cyclonedx.json --output json | jq > grype.report.json
+	@echo "Report generated at grype.report.json"
+
+###########################
+# Merge SBOMs and reports #
+###########################
+
+GO_SRCS := $(shell find ./ -type f -name '*.go')
+sbom-merger: go.mod go.sum $(GO_SRCS)
+	@echo "Building sbom-merger"
+	go build -o sbom-merger
+	@echo "sbom-merger built successfully"
+
+merged.sbom.cyclonedx.json: sbom-merger trivy.sbom.cyclonedx.json syft.sbom.cyclonedx.json
+	./sbom-merger -syft-sbom syft.sbom.cyclonedx.json  -trivy-sbom trivy.sbom.cyclonedx.json
+
+.PHONY: merged-reports-grype
+merged-reports-grype: merged.sbom.cyclonedx.json
+	@echo "Generating merged reports"
+	grype sbom:merged.sbom.cyclonedx.json --output sarif | jq > grype.merged.report.sarif.json
+	grype sbom:merged.sbom.cyclonedx.json --output json | jq > grype.merged.report.json
+	@echo "Merged report generated at grype.merged.report.sarif.json"
+
+.PHONY: merged-reports-trivy
+merged-reports-trivy: merged.sbom.cyclonedx.json
+	@echo "Generating merged reports"
+	trivy sbom --format sarif --output trivy.merged.report.sarif.json merged.sbom.cyclonedx.json
+	trivy sbom --format json --output trivy.merged.report.json merged.sbom.cyclonedx.json
+	@echo "Merged report generated at trivy.merged.report.sarif.json"
+
+.PHONY: clean
+clean:
+	rm -f *.json
+	@echo "Cleaned up generated files"
