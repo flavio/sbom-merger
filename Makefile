@@ -30,22 +30,24 @@ trivy.report.json: trivy.sbom.cyclonedx.json
 
 syft.sbom.spdx.json:
 	@echo "Generating syft SBOM using SPDX format"
-	syft scan $(IMAGE) --output spdx-json@2.2 | jq > syft.sbom.spdx.json
+	SYFT_GOLANG_MAIN_MODULE_VERSION_FROM_CONTENTS=true \
+		syft scan $(IMAGE) --output spdx-json@2.2 | jq > syft.sbom.spdx.json
 	@echo "SBOM generated at syft.sbom.spdx.json"
 
 syft.sbom.cyclonedx.json:
 	@echo "Generating syft SBOM using cyclonedx-json format"
-	syft scan $(IMAGE) --output cyclonedx-json | jq > syft.sbom.cyclonedx.json
+	SYFT_GOLANG_MAIN_MODULE_VERSION_FROM_CONTENTS=true \
+		syft scan $(IMAGE) --output cyclonedx-json | jq > syft.sbom.cyclonedx.json
 	@echo "SBOM generated at syft.sbom.cyclonedx.json"
 
 grype.report.sarif.json: syft.sbom.cyclonedx.json
 	@echo "Generating grype report using sarif format"
-	grype sbom:syft.sbom.cyclonedx.json --output sarif | jq > grype.report.sarif.json
+	grype sbom:syft.sbom.cyclonedx.json --output sarif --by-cve | jq > grype.report.sarif.json
 	@echo "Report generated at grype.report.sarif.json"
 
 grype.report.json: syft.sbom.cyclonedx.json
 	@echo "Generating grype report using json format"
-	grype sbom:syft.sbom.cyclonedx.json --output json | jq > grype.report.json
+	grype sbom:syft.sbom.cyclonedx.json --output json  --by-cve|  jq > grype.report.json
 	@echo "Report generated at grype.report.json"
 
 ###########################
