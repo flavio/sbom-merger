@@ -60,23 +60,6 @@ sbom-merger: go.mod go.sum $(GO_SRCS)
 	go build -o sbom-merger
 	@echo "sbom-merger built successfully"
 
-merged.sbom.cyclonedx.json: sbom-merger trivy.sbom.cyclonedx.json syft.sbom.cyclonedx.json
-	./sbom-merger -syft-sbom syft.sbom.cyclonedx.json  -trivy-sbom trivy.sbom.cyclonedx.json
-
-.PHONY: merged-reports-grype
-merged-reports-grype: merged.sbom.cyclonedx.json
-	@echo "Generating merged reports"
-	grype sbom:merged.sbom.cyclonedx.json --output sarif | jq > grype.merged.report.sarif.json
-	grype sbom:merged.sbom.cyclonedx.json --output json | jq > grype.merged.report.json
-	@echo "Merged report generated at grype.merged.report.sarif.json"
-
-.PHONY: merged-reports-trivy
-merged-reports-trivy: merged.sbom.cyclonedx.json
-	@echo "Generating merged reports"
-	trivy sbom --format sarif --output trivy.merged.report.sarif.json merged.sbom.cyclonedx.json
-	trivy sbom --format json --output trivy.merged.report.json merged.sbom.cyclonedx.json
-	@echo "Merged report generated at trivy.merged.report.sarif.json"
-
 .PHONY: clean
 clean:
 	rm -f *.json
