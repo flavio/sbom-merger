@@ -1,13 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 
-	grype_types "github.com/anchore/grype/grype/presenter/models"
-	trivy_types "github.com/aquasecurity/trivy/pkg/types"
 	grype_helper "github.com/flavio/sbom-merger/internal/grype"
 	trivy_helper "github.com/flavio/sbom-merger/internal/trivy"
 	"github.com/flavio/sbom-merger/internal/types"
@@ -32,13 +29,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	var trivyReport trivy_types.Report
-	err = json.Unmarshal(trivyReportBytes, &trivyReport)
+	trivyReport, err := trivy_helper.ConvertReport(trivyReportBytes)
 	if err != nil {
-		slog.Error("failed to unmarshal trivy report", "error", err)
+		slog.Error("failed to convert trivy report", "error", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Trivy SBOM generated for image %s with %d vulnerabilities\n", image, len(trivyReport.Results))
 
 	syftSBOMBytes, err := generateSBOM(types.GRYPE, image)
 	if err != nil {
@@ -51,14 +46,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	var document grype_types.Document
-	err = json.Unmarshal(grypeReportBytes, &document)
+	grypeReport, err := grype_helper.ConvertReport(grypeReportBytes)
 	if err != nil {
-		slog.Error("failed to unmarshal grype report", "error", err)
+		slog.Error("failed to convert trivy report", "error", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Syft SBOM generated for image %s with %d vulnerabilities\n", image, len(document.Matches))
+	fmt.Println("Trivy Report:")
+	for cve, vulnerabilities := range trivyReport {
+		fmt.Printf("---\nCVE: %s\n", cve)
+		for _, vuln := range vulnerabilities {
+			fmt.Printf("PURL: %s\n", vuln.PURL)
+			fmt.Printf("%+v\n", vuln)
+		}
+	}
+
+	fmt.Println("\nGrype Report:")
+	for cve, vulnerabilities := range grypeReport {
+		fmt.Printf("---\nCVE: %s\n", cve)
+		for _, vuln := range vulnerabilities {
+			fmt.Printf("PURL: %s\n", vuln.PURL)
+			fmt.Printf("%+v\n", vuln)
+		}
+	}
 }
 
 func generateSBOM(scanner types.ScannerType, image string) ([]byte, error) {

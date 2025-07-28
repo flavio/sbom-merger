@@ -2,6 +2,7 @@ package grype
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -9,7 +10,10 @@ import (
 
 	"github.com/anchore/clio"
 	grype_cli "github.com/anchore/grype/cmd/grype/cli"
+	grype_types "github.com/anchore/grype/grype/presenter/models"
 	syft_cli "github.com/anchore/syft/cmd/syft/cli"
+	syft_file "github.com/anchore/syft/syft/file"
+	"github.com/flavio/sbom-merger/internal/types"
 )
 
 func GenerateSBOM(image string) ([]byte, error) {
@@ -113,4 +117,69 @@ func GenerateReport(sbomBytes []byte) ([]byte, error) {
 	}
 
 	return reportBytes, nil
+}
+
+func ConvertReport(reportBytes []byte) (types.Vulnerabilities, error) {
+	var document grype_types.Document
+	err := json.Unmarshal(reportBytes, &document)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal grype report: %w", err)
+	}
+
+	return reportFromDocument(document), nil
+}
+
+func reportFromDocument(report grype_types.Document) types.Vulnerabilities {
+	vulnerabilities := make(types.Vulnerabilities)
+
+	for _, match := range report.Matches {
+		cvss := vulnerabilityCVSS(match.Vulnerability.Cvss)
+
+		layerDiffID := extractLocation(match.Artifact.Locations)
+
+		v := types.Vulnerability{
+			VulnerabilityID:  match.Vulnerability.ID,
+			PackageName:      match.Artifact.Name,
+			PURL:             match.Artifact.PURL,
+			InstalledVersion: match.Artifact.Version,
+			FixedVersions:    match.Vulnerability.Fix.Versions,
+			Status:           match.Vulnerability.Fix.State,
+			LayerDiffID:      layerDiffID,
+			Title:            "", // Title is not present in grype report, so we leave it empty
+			Description:      match.Vulnerability.Description,
+			Severity:         match.Vulnerability.Severity,
+			Cvss:             cvss,
+			References:       match.Vulnerability.URLs,
+		}
+
+		vulnerabilities[v.VulnerabilityID] = append(vulnerabilities[v.VulnerabilityID], v)
+
+	}
+
+	return vulnerabilities
+}
+
+func extractLocation(locations syft_file.Locations) string {
+	if len(locations) == 0 {
+		return ""
+	}
+
+	return locations[0].Coordinates.FileSystemID
+}
+
+func vulnerabilityCVSS(cvss []grype_types.Cvss) types.CVSS {
+	for _, cvss := range cvss {
+		// just return the first CVSS score and vector of version 3.x
+		if cvss.Version == "3.1" || cvss.Version == "3.0" {
+			return types.CVSS{
+				V3Score:  cvss.Metrics.BaseScore,
+				V3Vector: cvss.Vector,
+			}
+		}
+	}
+
+	return types.CVSS{
+		V3Score:  0,
+		V3Vector: "",
+	}
 }
